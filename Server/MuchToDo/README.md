@@ -10,11 +10,12 @@ Kubernetes cluster using Kind.
 - kubectl
 
 ## Project Structure
-
-container-assessment/
+```
+Server/MuchToDo/
 ├── Dockerfile
-├── docker-compose.yml
+├── docker-compose.yaml
 ├── .dockerignore
+├── README.md
 ├── kubernetes/
 │   ├── namespace.yaml
 │   ├── mongodb/
@@ -34,7 +35,8 @@ container-assessment/
 │   ├── docker-run.sh
 │   ├── k8s-deploy.sh
 │   └── k8s-cleanup.sh
-└── README
+└── evidence/
+```
 
 ## Phase 1: Docker Setup
 
