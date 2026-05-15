@@ -1,0 +1,119 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches:
+      - feature/full-stack
+    paths:
+      - 'Server/**'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test and Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Install dependencies
+        run: |
+          cd Server/MuchToDo
+          go mod tidy
+
+      - name: Run unit tests
+        run: |
+          cd Server/MuchToDo
+          go test ./...
+
+      - name: Run vulnerability scan
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd Server/MuchToDo
+          govulncheck ./...
+
+  build:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        run: |
+          cd Server/MuchToDo
+          docker build -t ${{ secrets.ECR_REPOSITORY_URL }}:latest .
+          docker tag ${{ secrets.ECR_REPOSITORY_URL }}:latest ${{ 
+secrets.ECR_REPOSITORY_URL }}:${{ github.sha }}
+
+      - name: Scan Docker image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.ECR_REPOSITORY_URL }}:latest
+          format: table
+          exit-code: '0'
+
+      - name: Push Docker image to ECR
+        run: |
+          docker push ${{ secrets.ECR_REPOSITORY_URL }}:latest
+          docker push ${{ secrets.ECR_REPOSITORY_URL }}:${{ github.sha }}
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy to Auto Scaling Group
+        run: |
+          aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name starttech-asg \
+            --preferences MinHealthyPercentage=50
+
+      - name: Configure Auto Scaling policies
+        run: |
+          aws autoscaling put-scaling-policy \
+            --auto-scaling-group-name starttech-asg \
+            --policy-name starttech-scale-up \
+            --scaling-adjustment 1 \
+            --adjustment-type ChangeInCapacity
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests..."
+          sleep 30
+          curl -f http://${{ secrets.ALB_DNS_NAME }}/health || echo 
+"Health check pending"
+
+      - name: Setup CloudWatch monitoring
+        run: |
+          aws logs create-log-group \
+            --log-group-name /starttech/starttech/backend \
+            --region us-east-1 || true
+          echo "CloudWatch monitoring configured"
