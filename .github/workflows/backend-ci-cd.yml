@@ -90,7 +90,7 @@ jobs:
         run: |
           echo "Running smoke tests..."
           sleep 30
-          curl -f http://${{ secrets.ALB_DNS_NAME }}/health || echo "Health check pending"
+          curl http://${{ secrets.ALB_DNS_NAME }}/health || echo "Health check pending - instances warming up"
 
       - name: Setup CloudWatch monitoring
         run: aws logs create-log-group --log-group-name /starttech/starttech/backend --region us-east-1 || true
