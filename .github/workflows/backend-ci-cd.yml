@@ -53,8 +53,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          cd Server/MuchToDo
-          docker build -t ${{ secrets.ECR_REPOSITORY_URL }}:latest .
+          docker build -t ${{ secrets.ECR_REPOSITORY_URL }}:latest ./Server/MuchToDo
           docker tag ${{ secrets.ECR_REPOSITORY_URL }}:latest ${{ secrets.ECR_REPOSITORY_URL }}:${{ github.sha }}
 
       - name: Scan Docker image
